@@ -21,7 +21,6 @@ function App() {
 
     const recognition = new SpeechRecognition();
 
-    // ✅ FIX: avoid restart noise loop
     recognition.continuous = false;
     recognition.interimResults = false;
     recognition.lang = "en-US";
@@ -68,22 +67,6 @@ function App() {
       }
     };
 
-    // ✅ SAFE RESTART (no rapid loop)
-    recognition.onend = () => {
-      if (stoppedByUserRef.current) return;
-
-      setListening(false);
-
-      setTimeout(() => {
-        try {
-          recognition.start();
-          setListening(true);
-        } catch (e) {
-          console.log("Restart error:", e);
-        }
-      }, 800);
-    };
-
     recognition.onerror = (event) => {
       console.log("Speech recognition error:", event.error);
 
@@ -124,7 +107,7 @@ function App() {
     setSpeaking(false);
   };
 
-  // 🔊 SPEAK (FIXED: pauses mic while speaking)
+  // 🔊 SPEAK → restart mic ONLY after speech ends
   const speak = (message) => {
     window.speechSynthesis.cancel();
 
@@ -134,23 +117,24 @@ function App() {
 
     setSpeaking(true);
 
-    // ⛔ stop mic while AI is speaking
+    // ⛔ stop mic while speaking
     recognitionRef.current?.abort();
+    setListening(false);
 
     speech.onend = () => {
       setSpeaking(false);
 
-      // 🔁 restart listening after speaking
+      // 🔁 restart ONLY after speaking finishes
       setTimeout(() => {
         if (!stoppedByUserRef.current) {
           try {
             recognitionRef.current?.start();
             setListening(true);
           } catch (e) {
-            console.log("Restart after speak error:", e);
+            console.log("Restart error:", e);
           }
         }
-      }, 500);
+      }, 600);
     };
 
     window.speechSynthesis.speak(speech);
