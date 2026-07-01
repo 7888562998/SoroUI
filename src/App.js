@@ -65,9 +65,23 @@ function App() {
       }
     };
 
-    // ❌ IMPORTANT FIX: no auto restart loop on mobile
+    // 🔥 FIX: TRUE CONTINUOUS LISTENING
     recognition.onend = () => {
-      setListening(false);
+      if (stoppedByUserRef.current) return;
+
+      try {
+        recognition.start();
+        setListening(true);
+      } catch (e) {
+        console.log("Restart error:", e);
+
+        setTimeout(() => {
+          try {
+            recognition.start();
+            setListening(true);
+          } catch {}
+        }, 500);
+      }
     };
 
     recognition.onerror = (event) => {
@@ -88,7 +102,7 @@ function App() {
     };
   }, []);
 
-  // ▶️ MANUAL START (mobile-safe)
+  // ▶️ START (continuous)
   const startListening = () => {
     try {
       stoppedByUserRef.current = false;
@@ -102,8 +116,10 @@ function App() {
   // ⛔ STOP
   const stopListening = () => {
     stoppedByUserRef.current = true;
+
     recognitionRef.current?.stop();
     window.speechSynthesis.cancel();
+
     setListening(false);
     setSpeaking(false);
   };
@@ -140,7 +156,6 @@ function App() {
         {listening ? "🎤 Listening..." : "⏸️ Stopped"}
       </p>
 
-      {/* 🎯 MOBILE CONTROLS */}
       <div style={{ margin: "10px" }}>
         <button onClick={startListening} disabled={listening}>
           Start Listening
