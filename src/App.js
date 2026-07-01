@@ -16,7 +16,10 @@ function App() {
     const recognition = new SpeechRecognition();
 
     recognition.continuous = true;
+    recognition.interimResults = false;
     recognition.lang = "en-US";
+
+    let isStoppedByUser = false;
 
     recognition.onresult = async (event) => {
       const userText =
@@ -30,37 +33,71 @@ function App() {
         userText.includes("stop talking") ||
         userText.includes("shut up")
       ) {
-        window.speechSynthesis.cancel(); // stop speaking instantly
+        isStoppedByUser = true;
+        window.speechSynthesis.cancel();
         setSpeaking(false);
         setReply("Okay, I stopped talking.");
+        recognition.stop();
+        setListening(false);
         return;
       }
 
-      const res = await fetch("https://soro-ai-eight.vercel.app/api/v1/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userText }),
-      });
+      try {
+        const res = await fetch(
+          "https://soro-ai-eight.vercel.app/api/v1/chat",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: userText }),
+          }
+        );
 
-      const data = await res.json();
-      setReply(data.reply);
+        const data = await res.json();
+        setReply(data.reply);
 
-      speak(data.reply);
+        speak(data.reply);
+      } catch (err) {
+        console.log("API error:", err);
+      }
+    };
+
+    // 🔥 IMPORTANT FIX: restart when Chrome stops recognition
+    recognition.onend = () => {
+      if (!isStoppedByUser) {
+        console.log("Restarting speech recognition...");
+        setTimeout(() => {
+          try {
+            recognition.start();
+            setListening(true);
+          } catch (e) {}
+        }, 300);
+      }
+    };
+
+    recognition.onerror = (event) => {
+      console.log("Speech recognition error:", event.error);
+
+      if (event.error !== "no-speech") {
+        try {
+          recognition.stop();
+          setTimeout(() => recognition.start(), 500);
+        } catch (e) {}
+      }
     };
 
     recognitionRef.current = recognition;
 
-    // auto start listening
+    // start listening
     recognition.start();
     setListening(true);
 
     return () => {
+      isStoppedByUser = true;
       recognition.stop();
     };
   }, []);
 
   const speak = (message) => {
-    // 🔥 stop any previous speech before speaking new one
     window.speechSynthesis.cancel();
 
     const speech = new SpeechSynthesisUtterance(message);
