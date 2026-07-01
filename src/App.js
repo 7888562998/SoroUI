@@ -73,7 +73,7 @@ function App() {
       if (event.error !== "no-speech") {
         try {
           recognition.abort();
-        } catch {}
+        } catch { }
       }
     };
 
@@ -147,8 +147,11 @@ function App() {
       <div className="face">
         <div className={`eye left ${listening ? "blink" : ""}`}></div>
         <div className={`eye right ${listening ? "blink" : ""}`}></div>
-        <div className={`mouth ${speaking ? "talking" : ""}`}></div>
-      </div>
+        <div className={`mouth ${speaking ? "talking" : ""}`}>
+          {Array.from({ length: 7 }).map((_, i) => (
+            <span key={i}></span>
+          ))}
+        </div>      </div>
 
       <p className="status">
         {listening ? "🎤 Listening..." : "⏸️ Stopped"}
