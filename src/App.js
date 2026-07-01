@@ -8,18 +8,22 @@ function App() {
   const [reply, setReply] = useState("Hi, I am Soro 🤖");
 
   const recognitionRef = useRef(null);
+  const stoppedByUserRef = useRef(false);
 
   useEffect(() => {
     const SpeechRecognition =
       window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      alert("Speech Recognition not supported on this device/browser.");
+      return;
+    }
 
     const recognition = new SpeechRecognition();
 
     recognition.continuous = true;
     recognition.interimResults = false;
     recognition.lang = "en-US";
-
-    let isStoppedByUser = false;
 
     recognition.onresult = async (event) => {
       const userText =
@@ -33,7 +37,7 @@ function App() {
         userText.includes("stop talking") ||
         userText.includes("shut up")
       ) {
-        isStoppedByUser = true;
+        stoppedByUserRef.current = true;
         window.speechSynthesis.cancel();
         setSpeaking(false);
         setReply("Okay, I stopped talking.");
@@ -61,17 +65,9 @@ function App() {
       }
     };
 
-    // 🔥 IMPORTANT FIX: restart when Chrome stops recognition
+    // ❌ IMPORTANT FIX: no auto restart loop on mobile
     recognition.onend = () => {
-      if (!isStoppedByUser) {
-        console.log("Restarting speech recognition...");
-        setTimeout(() => {
-          try {
-            recognition.start();
-            setListening(true);
-          } catch (e) {}
-        }, 300);
-      }
+      setListening(false);
     };
 
     recognition.onerror = (event) => {
@@ -80,37 +76,54 @@ function App() {
       if (event.error !== "no-speech") {
         try {
           recognition.stop();
-          setTimeout(() => recognition.start(), 500);
         } catch (e) {}
       }
     };
 
     recognitionRef.current = recognition;
 
-    // start listening
-    recognition.start();
-    setListening(true);
-
     return () => {
-      isStoppedByUser = true;
+      stoppedByUserRef.current = true;
       recognition.stop();
     };
   }, []);
+
+  // ▶️ MANUAL START (mobile-safe)
+  const startListening = () => {
+    try {
+      stoppedByUserRef.current = false;
+      recognitionRef.current?.start();
+      setListening(true);
+    } catch (e) {
+      console.log("Start error:", e);
+    }
+  };
+
+  // ⛔ STOP
+  const stopListening = () => {
+    stoppedByUserRef.current = true;
+    recognitionRef.current?.stop();
+    window.speechSynthesis.cancel();
+    setListening(false);
+    setSpeaking(false);
+  };
 
   const speak = (message) => {
     window.speechSynthesis.cancel();
 
     const speech = new SpeechSynthesisUtterance(message);
+    speech.lang = "en-US";
+    speech.rate = 1;
 
     setSpeaking(true);
-
-    speech.rate = 1;
 
     speech.onend = () => {
       setSpeaking(false);
     };
 
-    window.speechSynthesis.speak(speech);
+    setTimeout(() => {
+      window.speechSynthesis.speak(speech);
+    }, 100);
   };
 
   return (
@@ -120,13 +133,23 @@ function App() {
       <div className="face">
         <div className={`eye left ${listening ? "blink" : ""}`}></div>
         <div className={`eye right ${listening ? "blink" : ""}`}></div>
-
         <div className={`mouth ${speaking ? "talking" : ""}`}></div>
       </div>
 
       <p className="status">
-        {listening ? "🎤 Listening..." : "Starting..."}
+        {listening ? "🎤 Listening..." : "⏸️ Stopped"}
       </p>
+
+      {/* 🎯 MOBILE CONTROLS */}
+      <div style={{ margin: "10px" }}>
+        <button onClick={startListening} disabled={listening}>
+          Start Listening
+        </button>
+
+        <button onClick={stopListening} style={{ marginLeft: "10px" }}>
+          Stop
+        </button>
+      </div>
 
       <div className="box">
         <p><b>You:</b> {text}</p>
