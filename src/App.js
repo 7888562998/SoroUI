@@ -21,7 +21,8 @@ function App() {
 
     const recognition = new SpeechRecognition();
 
-    recognition.continuous = true;
+    // ✅ FIX: avoid restart noise loop
+    recognition.continuous = false;
     recognition.interimResults = false;
     recognition.lang = "en-US";
 
@@ -38,11 +39,13 @@ function App() {
         userText.includes("shut up")
       ) {
         stoppedByUserRef.current = true;
+
         window.speechSynthesis.cancel();
+        recognition.abort();
+
         setSpeaking(false);
-        setReply("Okay, I stopped talking.");
-        recognition.stop();
         setListening(false);
+        setReply("Okay, I stopped talking.");
         return;
       }
 
@@ -65,23 +68,20 @@ function App() {
       }
     };
 
-    // 🔥 FIX: TRUE CONTINUOUS LISTENING
+    // ✅ SAFE RESTART (no rapid loop)
     recognition.onend = () => {
       if (stoppedByUserRef.current) return;
 
-      try {
-        recognition.start();
-        setListening(true);
-      } catch (e) {
-        console.log("Restart error:", e);
+      setListening(false);
 
-        setTimeout(() => {
-          try {
-            recognition.start();
-            setListening(true);
-          } catch {}
-        }, 500);
-      }
+      setTimeout(() => {
+        try {
+          recognition.start();
+          setListening(true);
+        } catch (e) {
+          console.log("Restart error:", e);
+        }
+      }, 800);
     };
 
     recognition.onerror = (event) => {
@@ -89,8 +89,8 @@ function App() {
 
       if (event.error !== "no-speech") {
         try {
-          recognition.stop();
-        } catch (e) {}
+          recognition.abort();
+        } catch {}
       }
     };
 
@@ -98,11 +98,11 @@ function App() {
 
     return () => {
       stoppedByUserRef.current = true;
-      recognition.stop();
+      recognition.abort();
     };
   }, []);
 
-  // ▶️ START (continuous)
+  // ▶️ START
   const startListening = () => {
     try {
       stoppedByUserRef.current = false;
@@ -117,13 +117,14 @@ function App() {
   const stopListening = () => {
     stoppedByUserRef.current = true;
 
-    recognitionRef.current?.stop();
+    recognitionRef.current?.abort();
     window.speechSynthesis.cancel();
 
     setListening(false);
     setSpeaking(false);
   };
 
+  // 🔊 SPEAK (FIXED: pauses mic while speaking)
   const speak = (message) => {
     window.speechSynthesis.cancel();
 
@@ -133,13 +134,26 @@ function App() {
 
     setSpeaking(true);
 
+    // ⛔ stop mic while AI is speaking
+    recognitionRef.current?.abort();
+
     speech.onend = () => {
       setSpeaking(false);
+
+      // 🔁 restart listening after speaking
+      setTimeout(() => {
+        if (!stoppedByUserRef.current) {
+          try {
+            recognitionRef.current?.start();
+            setListening(true);
+          } catch (e) {
+            console.log("Restart after speak error:", e);
+          }
+        }
+      }, 500);
     };
 
-    setTimeout(() => {
-      window.speechSynthesis.speak(speech);
-    }, 100);
+    window.speechSynthesis.speak(speech);
   };
 
   return (
